@@ -28,11 +28,17 @@ class AuthController extends Controller
             'role' => $request->role ?? 'author',
         ]);
 
+        // Assign default 'user' role
+        $userRole = \App\Models\Role::where('slug', 'user')->first();
+        if ($userRole) {
+            $user->roles()->attach($userRole->id);
+        }
+
         $token = $user->createToken('oshongshoy-token')->plainTextToken;
 
         return response()->json([
             'message' => 'User registered successfully',
-            'user' => $user,
+            'user' => $user->load('roles'),
             'token' => $token,
         ], 201);
     }
@@ -51,12 +57,23 @@ class AuthController extends Controller
         }
 
         $user = Auth::user();
+        
+        // Check if user is blocked
+        if ($user->isBlocked()) {
+            Auth::logout();
+            return response()->json([
+                'success' => false,
+                'message' => 'Your account has been blocked. Please contact support.'
+            ], 403);
+        }
+
         $token = $user->createToken('oshongshoy-token')->plainTextToken;
 
         return response()->json([
             'message' => 'Login successful',
-            'user' => $user,
+            'user' => $user->load('roles'),
             'token' => $token,
+            'unread_warnings' => $user->getUnreadWarningsCount(),
         ]);
     }
 
@@ -71,8 +88,12 @@ class AuthController extends Controller
 
     public function user(Request $request)
     {
+        $user = $request->user()->load('roles');
         return response()->json([
-            'user' => $request->user()
+            'user' => $user,
+            'unread_warnings' => $user->getUnreadWarningsCount(),
+            'is_blocked' => $user->isBlocked(),
+            'active_warnings' => $user->getActiveWarnings(),
         ]);
     }
 }
