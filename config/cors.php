@@ -19,7 +19,18 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['*'],
+    'allowed_origins' => [
+        'http://localhost:3000', 
+        'http://localhost:3001', 
+        'http://localhost:3002', 
+        'http://localhost:3003', 
+        'http://localhost:3004', 
+        'http://localhost:3005', 
+        'http://localhost:3006',         
+        // 'https://app.SchemaFai.com',  
+        // 'https://schemafai.se',
+        // 'https://app.schemafai.se',
+    ],
 
     'allowed_origins_patterns' => [],
 
@@ -29,6 +40,6 @@ return [
 
     'max_age' => 0,
 
-    'supports_credentials' => false,
+    'supports_credentials' => true,
 
 ];
