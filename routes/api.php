@@ -4,6 +4,7 @@ use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\ArticleController;
 use App\Http\Controllers\API\CategoryController;
 use App\Http\Controllers\API\MediaController;
+use App\Http\Controllers\API\OTPController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -15,6 +16,11 @@ Route::get('/categories', [CategoryController::class, 'index']);
 // Authentication routes
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+
+// OTP routes
+Route::post('/send-otp', [OTPController::class, 'sendOTP']);
+Route::post('/verify-otp', [OTPController::class, 'verifyOTP']);
+Route::post('/reset-password', [OTPController::class, 'resetPassword']);
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
