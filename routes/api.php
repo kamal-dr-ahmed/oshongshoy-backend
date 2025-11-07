@@ -9,6 +9,7 @@ use App\Http\Controllers\API\ContentController;
 use App\Http\Controllers\API\ModerationController;
 use App\Http\Controllers\API\UserManagementController;
 use App\Http\Controllers\API\DashboardController;
+use App\Http\Controllers\API\ProfileController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -31,6 +32,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // Auth user info
     Route::get('/user', [AuthController::class, 'user']);
     Route::post('/logout', [AuthController::class, 'logout']);
+    
+    // Profile management
+    Route::put('/profile', [ProfileController::class, 'update']);
+    Route::post('/profile/email-change-otp', [ProfileController::class, 'requestEmailChangeOTP']);
+    Route::post('/profile/verify-email-otp', [ProfileController::class, 'verifyEmailChangeOTP']);
     
     // Article management
     Route::post('/articles', [ArticleController::class, 'store']);
