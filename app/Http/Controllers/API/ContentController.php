@@ -93,7 +93,10 @@ class ContentController extends Controller
                 return response()->json(['success' => false, 'message' => 'Cannot edit article in current status'], 400);
             }
 
-            $validator = Validator::make($request->all(), [
+            // Get only the fields we want to validate (exclude _method and other meta fields)
+            $dataToValidate = $request->except(['_method', '_token']);
+            
+            $validator = Validator::make($dataToValidate, [
                 'title' => 'sometimes|required|string|max:255',
                 'content' => 'sometimes|required|string',
                 'locale' => 'sometimes|required|string|in:bn,en,as,gu,hi,mr,ne,or,pa,si',
@@ -102,10 +105,20 @@ class ContentController extends Controller
                 'featured_image' => 'nullable|string',
                 'tags' => 'nullable|array',
                 'reading_time' => 'nullable|integer',
+                'subtitle' => 'nullable|string',
+                'external_links' => 'nullable|array',
+                'meta_title' => 'nullable|string',
+                'meta_description' => 'nullable|string',
+                'meta_keywords' => 'nullable|array',
             ]);
 
             if ($validator->fails()) {
-                return response()->json(['success' => false, 'errors' => $validator->errors()], 422);
+                return response()->json([
+                    'success' => false, 
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors(),
+                    'received_data' => array_keys($request->all()) // Debug: show what fields were sent
+                ], 422);
             }
 
             $article->update([

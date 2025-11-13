@@ -55,10 +55,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/categories/{category}', [CategoryController::class, 'destroy']);
     });
     
-    // Media management
-    Route::post('/media', [MediaController::class, 'store']);
-    Route::get('/media', [MediaController::class, 'index']);
-    Route::delete('/media/{media}', [MediaController::class, 'destroy']);
+    // Media management (Wasabi uploads)
+    Route::post('/media/upload/image', [MediaController::class, 'uploadImage']);
+    Route::post('/media/upload/video', [MediaController::class, 'uploadVideo']);
+    Route::post('/media/upload/file', [MediaController::class, 'uploadFile']);
+    Route::delete('/media/delete', [MediaController::class, 'deleteFile']);
     
     // Content creation and management (all logged-in users)
     Route::prefix('content')->group(function () {
@@ -66,6 +67,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/', [ContentController::class, 'store']);
         Route::get('/{id}', [ContentController::class, 'show']);
         Route::put('/{id}', [ContentController::class, 'update']);
+        Route::post('/{id}', [ContentController::class, 'update']); // For FormData with _method=PUT
         Route::delete('/{id}', [ContentController::class, 'destroy']);
         Route::post('/{id}/submit', [ContentController::class, 'submit']);
     });
