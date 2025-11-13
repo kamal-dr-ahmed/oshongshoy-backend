@@ -38,5 +38,6 @@ class Role extends Model
     public const SUPERADMIN = 'superadmin';
     public const ADMIN = 'admin';
     public const MODERATOR = 'moderator';
+    public const EDITOR = 'editor';
     public const USER = 'user';
 }

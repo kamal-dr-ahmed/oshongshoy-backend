@@ -66,6 +66,18 @@ class RoleSeeder extends Seeder
                 ],
             ],
             [
+                'name' => 'Editor',
+                'slug' => 'editor',
+                'description' => 'Can review, approve and moderate content',
+                'permissions' => [
+                    'moderate_content',
+                    'publish_content',
+                    'manage_media',
+                    'warn_users',
+                    'message_users',
+                ],
+            ],
+            [
                 'name' => 'User',
                 'slug' => 'user',
                 'description' => 'Regular user who can create and manage their own content',

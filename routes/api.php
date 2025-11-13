@@ -27,6 +27,11 @@ Route::post('/send-otp', [OTPController::class, 'sendOTP']);
 Route::post('/verify-otp', [OTPController::class, 'verifyOTP']);
 Route::post('/reset-password', [OTPController::class, 'resetPassword']);
 
+// Test route
+Route::get('/test', function() {
+    return response()->json(['message' => 'API is working', 'timestamp' => now()]);
+});
+
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
     // Auth user info
@@ -65,8 +70,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{id}/submit', [ContentController::class, 'submit']);
     });
     
-    // Moderation routes (admin and moderator only)
-    Route::middleware('role:moderator,admin,superadmin')->prefix('moderation')->group(function () {
+    // Moderation routes (admin, moderator, and editor)
+    Route::middleware('role:editor,moderator,admin,superadmin')->prefix('moderation')->group(function () {
         Route::get('/pending', [ModerationController::class, 'pending']);
         Route::post('/articles/{id}/approve', [ModerationController::class, 'approve']);
         Route::post('/articles/{id}/reject', [ModerationController::class, 'reject']);

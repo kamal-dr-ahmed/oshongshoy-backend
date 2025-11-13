@@ -19,7 +19,7 @@ class DashboardController extends Controller
             
             if ($user->isSuperAdmin() || $user->isAdmin()) {
                 return $this->adminStats($user);
-            } elseif ($user->isModerator()) {
+            } elseif ($user->isModerator() || $user->isEditor()) {
                 return $this->moderatorStats($user);
             } else {
                 return $this->userStats($user);
@@ -62,13 +62,17 @@ class DashboardController extends Controller
             'published_articles' => Article::where('status', 'published')->count(),
             'my_moderation_count' => ModerationLog::where('moderator_id', $user->id)->count(),
             'pending_articles_list' => Article::where('status', 'pending')
-                ->with(['user:id,name,email', 'category:id,name', 'translations'])
+                ->with(['user:id,name,email', 'category:id,name_bn,name_en', 'translations'])
                 ->orderBy('submitted_at', 'asc')->limit(20)->get(),
             'recent_moderation' => ModerationLog::where('moderator_id', $user->id)
                 ->with(['article.translations', 'article.user:id,name'])
                 ->orderBy('created_at', 'desc')->limit(10)->get(),
         ];
-        return response()->json(['success' => true, 'stats' => $stats, 'role' => 'moderator']);
+        
+        // Determine the specific role
+        $role = $user->isEditor() ? 'editor' : 'moderator';
+        
+        return response()->json(['success' => true, 'stats' => $stats, 'role' => $role]);
     }
 
     private function userStats($user)

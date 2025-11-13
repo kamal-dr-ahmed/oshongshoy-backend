@@ -18,17 +18,15 @@ class AuthController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8|confirmed',
-            'role' => 'sometimes|in:admin,editor,author'
         ]);
 
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role' => $request->role ?? 'author',
         ]);
 
-        // Assign default 'user' role
+        // Assign default 'user' role to all new registrations
         $userRole = \App\Models\Role::where('slug', 'user')->first();
         if ($userRole) {
             $user->roles()->attach($userRole->id);

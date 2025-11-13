@@ -17,7 +17,6 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
-        'role',
     ];
 
     protected $hidden = [
@@ -29,11 +28,6 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
     ];
-
-    // User roles (keeping old for backward compatibility)
-    const ROLE_ADMIN = 'admin';
-    const ROLE_EDITOR = 'editor';
-    const ROLE_AUTHOR = 'author';
 
     /**
      * Relationships
@@ -73,6 +67,7 @@ class User extends Authenticatable
      */
     public function hasRole(string $roleName): bool
     {
+        // Use roles relationship (Many-to-Many)
         return $this->roles()->where('slug', $roleName)->exists();
     }
 
@@ -93,17 +88,17 @@ class User extends Authenticatable
 
     public function isEditor(): bool
     {
-        return $this->role === self::ROLE_EDITOR;
+        return $this->hasRole(Role::EDITOR);
     }
 
     public function canManageContent(): bool
     {
-        return $this->isAdmin() || $this->isModerator();
+        return $this->isAdmin() || $this->isModerator() || $this->isEditor();
     }
 
     public function canModerate(): bool
     {
-        return $this->isModerator();
+        return $this->isModerator() || $this->isEditor();
     }
 
     /**
