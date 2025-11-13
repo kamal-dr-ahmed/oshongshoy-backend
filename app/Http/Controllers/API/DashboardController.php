@@ -73,21 +73,26 @@ class DashboardController extends Controller
 
     private function userStats($user)
     {
-        $stats = [
-            'total_articles' => $user->articles()->count(),
-            'draft_articles' => $user->articles()->where('status', 'draft')->count(),
-            'pending_articles' => $user->articles()->where('status', 'pending')->count(),
-            'approved_articles' => $user->articles()->where('status', 'approved')->count(),
-            'published_articles' => $user->articles()->where('status', 'published')->count(),
-            'rejected_articles' => $user->articles()->where('status', 'rejected')->count(),
-            'total_views' => $user->articles()->sum('view_count'),
-            'recent_articles' => $user->articles()
-                ->with(['category:id,name', 'translations', 'moderator:id,name'])
-                ->orderBy('updated_at', 'desc')->limit(10)->get(),
-            'warnings' => $user->getActiveWarnings(),
-            'unread_warnings_count' => $user->getUnreadWarningsCount(),
-        ];
-        return response()->json(['success' => true, 'stats' => $stats, 'role' => 'user']);
+        try {
+            $stats = [
+                'total_articles' => $user->articles()->count(),
+                'draft_articles' => $user->articles()->where('status', 'draft')->count(),
+                'pending_articles' => $user->articles()->where('status', 'pending')->count(),
+                'approved_articles' => $user->articles()->where('status', 'approved')->count(),
+                'published_articles' => $user->articles()->where('status', 'published')->count(),
+                'rejected_articles' => $user->articles()->where('status', 'rejected')->count(),
+                'total_views' => $user->articles()->sum('view_count'),
+                'recent_articles' => $user->articles()
+                    ->with(['category:id,name_bn,name_en', 'translations'])
+                    ->orderBy('updated_at', 'desc')->limit(10)->get(),
+                'warnings' => [], // Temporarily simplified
+                'unread_warnings_count' => 0, // Temporarily simplified
+            ];
+            return response()->json(['success' => true, 'stats' => $stats, 'role' => 'user']);
+        } catch (\Exception $e) {
+            \Log::error('Dashboard userStats error: ' . $e->getMessage());
+            throw $e;
+        }
     }
 
     public function users(Request $request)
