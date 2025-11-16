@@ -1,0 +1,28 @@
+{
+  "CORSRules": [
+    {
+      "AllowedOrigins": [
+        "http://localhost:3000",
+        "http://localhost:3003",
+        "https://oshongshoy.com",
+        "https://www.oshongshoy.com"
+      ],
+      "AllowedMethods": [
+        "GET",
+        "HEAD",
+        "PUT",
+        "POST",
+        "DELETE"
+      ],
+      "AllowedHeaders": [
+        "*"
+      ],
+      "ExposeHeaders": [
+        "ETag",
+        "Content-Length",
+        "Content-Type"
+      ],
+      "MaxAgeSeconds": 3600
+    }
+  ]
+}

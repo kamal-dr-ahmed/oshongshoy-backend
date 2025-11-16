@@ -196,4 +196,43 @@ class ModerationController extends Controller
             return response()->json(['success' => false, 'message' => 'Failed to unpublish article'], 500);
         }
     }
+
+    public function unapprove(Request $request, $id)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'reason' => 'required|string',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json(['success' => false, 'errors' => $validator->errors()], 422);
+            }
+
+            $article = Article::findOrFail($id);
+            $previousStatus = $article->status;
+
+            // Only allow unapproving approved or published articles
+            if (!in_array($article->status, ['approved', 'published'])) {
+                return response()->json(['success' => false, 'message' => 'Article must be approved or published to unapprove'], 400);
+            }
+
+            $article->update([
+                'status' => 'pending',
+                'moderation_notes' => $request->reason,
+            ]);
+
+            ModerationLog::create([
+                'article_id' => $article->id,
+                'moderator_id' => $request->user()->id,
+                'action' => 'unapproved',
+                'comment' => $request->reason,
+                'previous_status' => $previousStatus,
+                'new_status' => 'pending',
+            ]);
+
+            return response()->json(['success' => true, 'message' => 'Article unapproved and sent back to pending', 'article' => $article->fresh(['translations', 'category', 'user'])]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Failed to unapprove article'], 500);
+        }
+    }
 }

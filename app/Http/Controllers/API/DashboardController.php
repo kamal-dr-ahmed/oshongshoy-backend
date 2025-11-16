@@ -64,6 +64,12 @@ class DashboardController extends Controller
             'pending_articles_list' => Article::where('status', 'pending')
                 ->with(['user:id,name,email', 'category:id,name_bn,name_en', 'translations'])
                 ->orderBy('submitted_at', 'asc')->limit(20)->get(),
+            'approved_articles_list' => Article::where('status', 'approved')
+                ->with(['user:id,name,email', 'category:id,name_bn,name_en', 'translations'])
+                ->orderBy('moderated_at', 'desc')->limit(10)->get(),
+            'published_articles_list' => Article::where('status', 'published')
+                ->with(['user:id,name,email', 'category:id,name_bn,name_en', 'translations'])
+                ->orderBy('published_at', 'desc')->limit(10)->get(),
             'recent_moderation' => ModerationLog::where('moderator_id', $user->id)
                 ->with(['article.translations', 'article.user:id,name'])
                 ->orderBy('created_at', 'desc')->limit(10)->get(),

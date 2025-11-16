@@ -80,6 +80,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/articles/{id}/request-changes', [ModerationController::class, 'requestChanges']);
         Route::post('/articles/{id}/publish', [ModerationController::class, 'publish']);
         Route::post('/articles/{id}/unpublish', [ModerationController::class, 'unpublish']);
+        Route::post('/articles/{id}/unapprove', [ModerationController::class, 'unapprove']);
     });
     
     // User management routes (admin and superadmin only)
