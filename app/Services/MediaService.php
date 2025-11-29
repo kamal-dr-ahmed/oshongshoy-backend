@@ -14,10 +14,9 @@ class MediaService
     protected $imageManager;
     
     // Image quality settings
-    const IMAGE_QUALITY = 85;
+    const IMAGE_QUALITY = 80;  // Reduced quality for smaller file size
     const THUMBNAIL_SIZE = 300;
-    const MEDIUM_SIZE = 800;
-    const LARGE_SIZE = 1920;
+    const MEDIUM_SIZE = 800;  // Primary size - good balance of quality and size
     
     // Max file sizes (in bytes)
     const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -31,6 +30,7 @@ class MediaService
 
     /**
      * Upload and optimize an image
+     * Only saves medium (800px) and thumbnail (300px) versions for optimal storage
      */
     public function uploadImage(UploadedFile $file, string $folder = 'images'): array
     {
@@ -46,37 +46,23 @@ class MediaService
         
         $urls = [];
         
-        // Original (optimized)
-        $originalPath = "{$folder}/original/{$filename}.{$extension}";
-        $optimized = $this->optimizeImage($image, null);
-        $this->disk->put($originalPath, $optimized, 'public');
-        $urls['original'] = $this->disk->url($originalPath);
-        
-        // Large version (1920px max)
-        if ($image->width() > self::LARGE_SIZE || $image->height() > self::LARGE_SIZE) {
-            $largePath = "{$folder}/large/{$filename}.{$extension}";
-            $large = $this->optimizeImage($image, self::LARGE_SIZE);
-            $this->disk->put($largePath, $large, 'public');
-            $urls['large'] = $this->disk->url($largePath);
-        }
-        
-        // Medium version (800px max)
+        // Medium version (800px max) - Primary version with good quality and reasonable size
         $mediumPath = "{$folder}/medium/{$filename}.{$extension}";
         $medium = $this->optimizeImage($image, self::MEDIUM_SIZE);
         $this->disk->put($mediumPath, $medium, 'public');
         $urls['medium'] = $this->disk->url($mediumPath);
         
-        // Thumbnail (300px max)
+        // Thumbnail (300px max) - For previews and cards
         $thumbnailPath = "{$folder}/thumbnails/{$filename}.{$extension}";
         $thumbnail = $this->optimizeImage($image, self::THUMBNAIL_SIZE);
         $this->disk->put($thumbnailPath, $thumbnail, 'public');
         $urls['thumbnail'] = $this->disk->url($thumbnailPath);
         
         return [
-            'url' => $urls['original'],
+            'url' => $urls['medium'], // Return medium version as primary URL (best balance)
             'urls' => $urls,
             'filename' => "{$filename}.{$extension}",
-            'path' => $originalPath,
+            'path' => $mediumPath, // Store medium path as primary
             'size' => $file->getSize(),
             'mime_type' => $file->getMimeType(),
             'width' => $image->width(),
@@ -153,23 +139,29 @@ class MediaService
      */
     public function deleteFile(string $path): bool
     {
+        if (filter_var($path, FILTER_VALIDATE_URL)) {
+            $path = $this->extractPathFromUrl($path) ?? $path;
+        }
         return $this->disk->delete($path);
     }
 
     /**
      * Delete image and all its versions
      */
-    public function deleteImage(string $originalPath): bool
+    public function deleteImage(string $imagePath): bool
     {
+        if (filter_var($imagePath, FILTER_VALIDATE_URL)) {
+            $imagePath = $this->extractPathFromUrl($imagePath) ?? $imagePath;
+        }
         $deleted = true;
         
         // Extract base path
-        $pathInfo = pathinfo($originalPath);
-        $folder = dirname(dirname($originalPath));
+        $pathInfo = pathinfo($imagePath);
+        $folder = dirname(dirname($imagePath));
         $filename = $pathInfo['basename'];
         
-        // Delete all versions
-        $versions = ['original', 'large', 'medium', 'thumbnails'];
+        // Delete both versions (medium and thumbnails only)
+        $versions = ['medium', 'thumbnails'];
         foreach ($versions as $version) {
             $path = "{$folder}/{$version}/{$filename}";
             if ($this->disk->exists($path)) {
@@ -228,5 +220,36 @@ class MediaService
     public function exists(string $path): bool
     {
         return $this->disk->exists($path);
+    }
+
+    /**
+     * Extract storage path from full Wasabi URL
+     */
+    public function extractPathFromUrl(string $url): ?string
+    {
+        $wasabiUrl = config('filesystems.disks.wasabi.url');
+        $bucket = config('filesystems.disks.wasabi.bucket');
+        $endpoint = config('filesystems.disks.wasabi.endpoint');
+
+        $bases = array_filter([$wasabiUrl, $endpoint]);
+        foreach ($bases as $base) {
+            $base = rtrim($base, '/');
+            $pattern = preg_quote($base . '/' . $bucket . '/', '/');
+            $path = preg_replace('/^' . $pattern . '/', '', $url);
+            if ($path !== $url) {
+                return $path;
+            }
+        }
+
+        $parsedPath = parse_url($url, PHP_URL_PATH);
+        if ($parsedPath) {
+            $parsedPath = ltrim($parsedPath, '/');
+            $bucketPrefix = $bucket . '/';
+            if (function_exists('str_starts_with') && str_starts_with($parsedPath, $bucketPrefix)) {
+                return substr($parsedPath, strlen($bucketPrefix));
+            }
+        }
+
+        return null;
     }
 }

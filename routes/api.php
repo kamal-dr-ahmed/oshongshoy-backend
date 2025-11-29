@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/articles', [ArticleController::class, 'index']);
 Route::get('/articles/{slug}', [ArticleController::class, 'show']);
 Route::get('/categories', [CategoryController::class, 'index']);
+Route::get('/media/view', [MediaController::class, 'view']);
 
 // Authentication routes
 Route::post('/register', [AuthController::class, 'register']);

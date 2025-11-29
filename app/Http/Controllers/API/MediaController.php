@@ -5,7 +5,9 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Services\MediaService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class MediaController extends Controller
 {
@@ -48,6 +50,86 @@ class MediaController extends Controller
                 'success' => false,
                 'message' => 'Failed to upload image',
                 'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Public proxy endpoint to serve Wasabi-stored media even when the bucket blocks direct public access.
+     */
+    public function view(Request $request)
+    {
+        $data = $request->validate([
+            'path' => 'nullable|string',
+            'url' => 'nullable|url',
+        ]);
+
+        if (empty($data['path']) && empty($data['url'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Path or url is required',
+            ], 422);
+        }
+
+        $path = $data['path'] ?? null;
+        if (!$path && !empty($data['url'])) {
+            $path = $this->mediaService->extractPathFromUrl($data['url']);
+        }
+
+        if (!$path) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to resolve storage path',
+            ], 422);
+        }
+
+        $path = ltrim($path, '/');
+        if (Str::contains($path, ['..', '\\'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid path',
+            ], 422);
+        }
+
+        try {
+            $disk = Storage::disk('wasabi');
+
+            if (!$disk->exists($path)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'File not found',
+                ], 404);
+            }
+
+            $mimeType = $disk->mimeType($path) ?? 'application/octet-stream';
+            $stream = $disk->readStream($path);
+
+            if (!$stream) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unable to read file',
+                ], 500);
+            }
+
+            return response()->stream(function () use ($stream) {
+                fpassthru($stream);
+                if (is_resource($stream)) {
+                    fclose($stream);
+                }
+            }, 200, [
+                'Content-Type' => $mimeType,
+                'Cache-Control' => 'public, max-age=3600',
+                'Content-Disposition' => 'inline; filename="' . basename($path) . '"',
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Media proxy error: ' . $e->getMessage(), [
+                'path' => $path,
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load media file',
             ], 500);
         }
     }
@@ -144,6 +226,10 @@ class MediaController extends Controller
 
         try {
             $path = $request->input('path');
+            // Allow full Wasabi URLs or relative storage paths
+            if (filter_var($path, FILTER_VALIDATE_URL)) {
+                $path = $this->mediaService->extractPathFromUrl($path) ?? $path;
+            }
             $type = $request->input('type', 'file');
 
             if ($type === 'image') {
