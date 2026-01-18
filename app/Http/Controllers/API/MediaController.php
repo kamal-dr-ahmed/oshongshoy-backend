@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 
 class MediaController extends Controller
 {
@@ -101,7 +102,24 @@ class MediaController extends Controller
                 ], 404);
             }
 
-            $mimeType = $disk->mimeType($path) ?? 'application/octet-stream';
+            // Determine MIME type from file extension or default to application/octet-stream
+            $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+            $mimeTypeMap = [
+                'jpg' => 'image/jpeg',
+                'jpeg' => 'image/jpeg',
+                'png' => 'image/png',
+                'gif' => 'image/gif',
+                'webp' => 'image/webp',
+                'mp4' => 'video/mp4',
+                'mpeg' => 'video/mpeg',
+                'mov' => 'video/quicktime',
+                'avi' => 'video/x-msvideo',
+                'webm' => 'video/webm',
+                'mp3' => 'audio/mpeg',
+                'wav' => 'audio/wav',
+                'pdf' => 'application/pdf',
+            ];
+            $mimeType = $mimeTypeMap[$extension] ?? 'application/octet-stream';
             $stream = $disk->readStream($path);
 
             if (!$stream) {
@@ -122,7 +140,7 @@ class MediaController extends Controller
                 'Content-Disposition' => 'inline; filename="' . basename($path) . '"',
             ]);
         } catch (\Exception $e) {
-            \Log::error('Media proxy error: ' . $e->getMessage(), [
+            Log::error('Media proxy error: ' . $e->getMessage(), [
                 'path' => $path,
                 'trace' => $e->getTraceAsString(),
             ]);

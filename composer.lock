@@ -3406,7 +3406,7 @@
             },
             "autoload": {
                 "psr-4": {
-                    "Psr\\Log\\": "src"
+                    "Psr\Log\\": "src"
                 }
             },
             "notification-url": "https://packagist.org/downloads/",

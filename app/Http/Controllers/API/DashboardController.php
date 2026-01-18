@@ -9,6 +9,7 @@ use App\Models\Category;
 use App\Models\ModerationLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class DashboardController extends Controller
 {
@@ -16,7 +17,7 @@ class DashboardController extends Controller
     {
         try {
             $user = $request->user()->load('roles');
-            
+
             if ($user->isSuperAdmin() || $user->isAdmin()) {
                 return $this->adminStats($user);
             } elseif ($user->isModerator() || $user->isEditor()) {
@@ -39,10 +40,10 @@ class DashboardController extends Controller
             'published_articles' => Article::where('status', 'published')->count(),
             'rejected_articles' => Article::where('status', 'rejected')->count(),
             'total_categories' => Category::count(),
-            'active_moderators' => User::whereHas('roles', function($q) {
+            'active_moderators' => User::whereHas('roles', function ($q) {
                 $q->whereIn('slug', ['moderator', 'admin', 'superadmin']);
             })->count(),
-            'blocked_users' => User::whereHas('blocks', function($q) {
+            'blocked_users' => User::whereHas('blocks', function ($q) {
                 $q->where('is_active', true);
             })->count(),
             'recent_activities' => ModerationLog::with(['moderator:id,name', 'article.translations'])
@@ -74,10 +75,10 @@ class DashboardController extends Controller
                 ->with(['article.translations', 'article.user:id,name'])
                 ->orderBy('created_at', 'desc')->limit(10)->get(),
         ];
-        
+
         // Determine the specific role
         $role = $user->isEditor() ? 'editor' : 'moderator';
-        
+
         return response()->json(['success' => true, 'stats' => $stats, 'role' => $role]);
     }
 
@@ -100,7 +101,7 @@ class DashboardController extends Controller
             ];
             return response()->json(['success' => true, 'stats' => $stats, 'role' => 'user']);
         } catch (\Exception $e) {
-            \Log::error('Dashboard userStats error: ' . $e->getMessage());
+            Log::error('Dashboard userStats error: ' . $e->getMessage());
             throw $e;
         }
     }
@@ -111,7 +112,7 @@ class DashboardController extends Controller
             $perPage = $request->get('per_page', 15);
             $search = $request->get('search', '');
             $users = User::with('roles', 'blocks')
-                ->when($search, function($q) use ($search) {
+                ->when($search, function ($q) use ($search) {
                     $q->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%");
                 })
                 ->orderBy('created_at', 'desc')->paginate($perPage);
@@ -128,11 +129,11 @@ class DashboardController extends Controller
             $status = $request->get('status', '');
             $search = $request->get('search', '');
             $articles = Article::with(['user:id,name,email', 'category:id,name', 'translations', 'moderator:id,name'])
-                ->when($status, function($q) use ($status) {
+                ->when($status, function ($q) use ($status) {
                     $q->where('status', $status);
                 })
-                ->when($search, function($q) use ($search) {
-                    $q->whereHas('translations', function($query) use ($search) {
+                ->when($search, function ($q) use ($search) {
+                    $q->whereHas('translations', function ($query) use ($search) {
                         $query->where('title', 'like', "%{$search}%");
                     });
                 })

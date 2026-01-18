@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers\API;
 
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\FacadesLog;
 use App\Http\Controllers\Controller;
 use App\Models\Article;
 use App\Models\ArticleTranslation;
+use App\Models\Media;
 use App\Services\MediaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +20,7 @@ class ContentController extends Controller
     {
         try {
             $articles = $request->user()->articles()
-                ->with(['category', 'translations', 'tags', 'externalLinks', 'moderator'])
+                ->with(['category', 'translations', 'tags', 'externalLinks', 'moderator', 'media'])
                 ->orderBy('updated_at', 'desc')
                 ->paginate(15);
             return response()->json(['success' => true, 'articles' => $articles]);
@@ -40,7 +43,7 @@ class ContentController extends Controller
                 $request->merge(['meta_keywords' => json_decode($request->meta_keywords, true)]);
             }
 
-            \Log::info('Content store request meta', [
+            Log::info('Content store request meta', [
                 'user_id' => optional($request->user())->id,
                 'payload_keys' => array_keys($request->all()),
                 'has_featured_file' => $request->hasFile('featured_image'),
@@ -51,7 +54,7 @@ class ContentController extends Controller
                 'locale' => $request->locale,
                 'category_id' => $request->category_id,
             ]);
-            
+
             $validator = Validator::make($request->all(), [
                 'title' => 'required|string|max:255',
                 'content' => 'required|string',
@@ -64,7 +67,7 @@ class ContentController extends Controller
             ]);
 
             if ($validator->fails()) {
-                \Log::warning('Content validation failed', [
+                Log::warning('Content validation failed', [
                     'user_id' => $request->user()->id ?? null,
                     'errors' => $validator->errors()->toArray(),
                     'payload_keys' => array_keys($request->all()),
@@ -96,7 +99,7 @@ class ContentController extends Controller
                 'content' => $request->content,
                 'excerpt' => $request->excerpt ?? Str::limit(strip_tags($request->content), 200),
             ];
-            
+
             // Add optional fields if provided
             if ($request->has('subtitle')) {
                 $translationData['subtitle'] = $request->subtitle;
@@ -110,19 +113,20 @@ class ContentController extends Controller
             if ($request->has('meta_keywords')) {
                 $translationData['meta_keywords'] = $request->meta_keywords;
             }
-            
-            ArticleTranslation::create($translationData);
 
+            ArticleTranslation::create($translationData);
+            // Save article images from content to article_media table
+            $this->saveArticleImages($article, $request->content);
             if ($request->has('tags') && is_array($request->tags)) {
                 $tagIds = [];
                 foreach ($request->tags as $tagName) {
                     // Remove # if present
                     $tagName = ltrim($tagName, '#');
                     if (!empty($tagName)) {
-                        $slug = \Str::slug($tagName);
+                        $slug = Str::slug($tagName);
                         // Find or create tag - use name_bn for Bengali tags
                         $tag = \App\Models\Tag::where('slug', $slug)->first();
-                        
+
                         if (!$tag) {
                             $tag = \App\Models\Tag::create([
                                 'name_bn' => $tagName,
@@ -148,7 +152,7 @@ class ContentController extends Controller
                                 'type' => $linkData['type'] ?? 'reference'
                             ]
                         );
-                        
+
                         // Attach to article
                         $article->externalLinks()->attach($externalLink->id);
                     }
@@ -165,7 +169,7 @@ class ContentController extends Controller
 
             DB::commit();
 
-            return response()->json(['success' => true, 'message' => 'Article saved as draft', 'article' => $article->load(['translations', 'category', 'tags', 'externalLinks'])], 201);
+            return response()->json(['success' => true, 'message' => 'Article saved as draft', 'article' => $article->load(['translations', 'category', 'tags', 'externalLinks', 'media'])], 201);
         } catch (\Exception $e) {
             if (DB::transactionLevel() > 0) {
                 DB::rollBack();
@@ -178,14 +182,14 @@ class ContentController extends Controller
                     try {
                         $mediaService->deleteImage($path);
                     } catch (\Throwable $cleanupException) {
-                        \Log::warning('Failed to clean up uploaded image after error', [
+                        Log::warning('Failed to clean up uploaded image after error', [
                             'path' => $path,
                             'error' => $cleanupException->getMessage(),
                         ]);
                     }
                 }
             }
-            \Log::error('Content create error: ' . $e->getMessage(), [
+            Log::error('Content create error: ' . $e->getMessage(), [
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString()
@@ -197,7 +201,7 @@ class ContentController extends Controller
     public function show(Request $request, $id)
     {
         try {
-            $article = Article::with(['translations', 'category', 'tags', 'externalLinks', 'moderator', 'moderationLogs.moderator'])->findOrFail($id);
+            $article = Article::with(['translations', 'category', 'tags', 'externalLinks', 'moderator', 'moderationLogs.moderator', 'media'])->findOrFail($id);
             if ($article->user_id !== $request->user()->id && !$request->user()->canModerate()) {
                 return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
             }
@@ -231,7 +235,7 @@ class ContentController extends Controller
 
             // Get only the fields we want to validate (exclude _method and other meta fields)
             $dataToValidate = $request->except(['_method', '_token']);
-            
+
             $validator = Validator::make($dataToValidate, [
                 'title' => 'sometimes|required|string|max:255',
                 'content' => 'sometimes|required|string',
@@ -250,7 +254,7 @@ class ContentController extends Controller
 
             if ($validator->fails()) {
                 return response()->json([
-                    'success' => false, 
+                    'success' => false,
                     'message' => 'Validation failed',
                     'errors' => $validator->errors(),
                     'received_data' => array_keys($request->all()) // Debug: show what fields were sent
@@ -267,13 +271,13 @@ class ContentController extends Controller
             if ($request->has('title') || $request->has('content')) {
                 $locale = $request->locale ?? 'bn';
                 $translation = $article->translations()->where('locale', $locale)->first();
-                
+
                 $translationData = [
                     'title' => $request->title ?? ($translation ? $translation->title : ''),
                     'content' => $request->content ?? ($translation ? $translation->content : ''),
                     'excerpt' => $request->excerpt ?? ($translation ? $translation->excerpt : Str::limit(strip_tags($request->content ?? ''), 200)),
                 ];
-                
+
                 // Add meta fields if provided
                 if ($request->has('subtitle')) {
                     $translationData['subtitle'] = $request->subtitle;
@@ -287,13 +291,21 @@ class ContentController extends Controller
                 if ($request->has('meta_keywords')) {
                     $translationData['meta_keywords'] = $request->meta_keywords;
                 }
-                
+
                 if ($translation) {
                     $translation->update($translationData);
                 } else {
                     $translationData['article_id'] = $article->id;
                     $translationData['locale'] = $locale;
                     ArticleTranslation::create($translationData);
+                }
+
+                // Save article images from content to article_media table
+                if ($request->has('content')) {
+                    // Clear existing media associations for this article
+                    $article->media()->detach();
+                    // Save new images from content
+                    $this->saveArticleImages($article, $request->content);
                 }
             }
 
@@ -303,10 +315,10 @@ class ContentController extends Controller
                     // Remove # if present
                     $tagName = ltrim($tagName, '#');
                     if (!empty($tagName)) {
-                        $slug = \Str::slug($tagName);
+                        $slug = Str::slug($tagName);
                         // Find or create tag - use name_bn for Bengali tags
                         $tag = \App\Models\Tag::where('slug', $slug)->first();
-                        
+
                         if (!$tag) {
                             $tag = \App\Models\Tag::create([
                                 'name_bn' => $tagName,
@@ -324,7 +336,7 @@ class ContentController extends Controller
             if ($request->has('external_links') && is_array($request->external_links)) {
                 // Detach all existing links first
                 $article->externalLinks()->detach();
-                
+
                 foreach ($request->external_links as $linkData) {
                     if (is_array($linkData) && isset($linkData['url']) && isset($linkData['title'])) {
                         // Create or find the external link
@@ -335,22 +347,22 @@ class ContentController extends Controller
                                 'type' => $linkData['type'] ?? 'reference'
                             ]
                         );
-                        
+
                         // Attach to article
                         $article->externalLinks()->attach($externalLink->id);
                     }
                 }
             }
 
-            return response()->json(['success' => true, 'message' => 'Article updated', 'article' => $article->fresh(['translations', 'category', 'tags', 'externalLinks'])]);
+            return response()->json(['success' => true, 'message' => 'Article updated', 'article' => $article->fresh(['translations', 'category', 'tags', 'externalLinks', 'media'])]);
         } catch (\Exception $e) {
-            \Log::error('Content update error: ' . $e->getMessage(), [
+            Log::error('Content update error: ' . $e->getMessage(), [
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString()
             ]);
             return response()->json([
-                'success' => false, 
+                'success' => false,
                 'message' => 'Failed to update article: ' . $e->getMessage(),
                 'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
             ], 500);
@@ -372,7 +384,7 @@ class ContentController extends Controller
             }
 
             $article->update(['status' => 'pending', 'submitted_at' => now()]);
-            return response()->json(['success' => true, 'message' => 'Article submitted for review', 'article' => $article->fresh(['translations', 'category'])]);
+            return response()->json(['success' => true, 'message' => 'Article submitted for review', 'article' => $article->fresh(['translations', 'category', 'media'])]);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Failed to submit article'], 500);
         }
@@ -382,35 +394,35 @@ class ContentController extends Controller
     {
         try {
             $article = Article::with('translations', 'media')->findOrFail($id);
-            
+
             // Check ownership
             if ($article->user_id !== $request->user()->id && !$request->user()->canModerate()) {
                 return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
             }
-            
+
             // Writers can only delete unpublished articles (draft, rejected, changes_requested)
             // Moderators can delete any article
             if ($article->user_id === $request->user()->id && !$request->user()->canModerate()) {
                 $allowedStatuses = ['draft', 'rejected', 'changes_requested'];
                 if (!in_array($article->status, $allowedStatuses)) {
                     return response()->json([
-                        'success' => false, 
+                        'success' => false,
                         'message' => 'Cannot delete articles that are pending, approved, or published. Please contact a moderator.'
                     ], 403);
                 }
             }
-            
+
             // Delete images from Wasabi before deleting article
             $this->deleteArticleImages($article);
-            
+
             $article->delete();
             return response()->json(['success' => true, 'message' => 'Article deleted successfully']);
         } catch (\Exception $e) {
-            \Log::error('Article deletion error: ' . $e->getMessage());
+            Log::error('Article deletion error: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to delete article'], 500);
         }
     }
-    
+
     /**
      * Delete all images associated with an article from Wasabi
      */
@@ -419,12 +431,12 @@ class ContentController extends Controller
         try {
             $mediaService = app(\App\Services\MediaService::class);
             $imagePaths = [];
-            
+
             // 1. Delete featured image
             if ($article->featured_image) {
                 $imagePaths[] = $mediaService->extractPathFromUrl($article->featured_image);
             }
-            
+
             // 2. Extract and delete images from article content (all translations)
             foreach ($article->translations as $translation) {
                 if ($translation->content) {
@@ -437,30 +449,89 @@ class ContentController extends Controller
                     }
                 }
             }
-            
+
             // 3. Delete images from media relationship
             foreach ($article->media as $media) {
                 if ($media->file_path) {
                     $imagePaths[] = $media->file_path;
                 }
             }
-            
+
             // Remove duplicates and null values
             $imagePaths = array_unique(array_filter($imagePaths));
-            
+
             // Delete each image from Wasabi
             foreach ($imagePaths as $path) {
                 try {
                     $mediaService->deleteImage($path);
-                    \Log::info("Deleted image from Wasabi: {$path}");
+                    Log::info("Deleted image from Wasabi: {$path}");
                 } catch (\Exception $e) {
-                    \Log::warning("Failed to delete image from Wasabi: {$path}. Error: " . $e->getMessage());
+                    Log::warning("Failed to delete image from Wasabi: {$path}. Error: " . $e->getMessage());
                 }
             }
-            
         } catch (\Exception $e) {
-            \Log::error('Error deleting article images: ' . $e->getMessage());
+            Log::error('Error deleting article images: ' . $e->getMessage());
             // Don't throw - allow article deletion to continue even if image deletion fails
+        }
+    }
+
+    /**
+     * Extract image URLs and metadata from markdown content and save to article_media table
+     */
+    private function saveArticleImages(Article $article, string $content): void
+    {
+        try {
+            // Extract image URLs from markdown format: ![alt](url)
+            preg_match_all('/!\[([^\]]*)\]\(([^\)]+)\)/m', $content, $matches);
+
+            if (empty($matches[2])) {
+                return;
+            }
+
+            $imageUrls = $matches[2];
+            $altTexts = $matches[1];
+            $mediaIds = [];
+
+            foreach ($imageUrls as $index => $imageUrl) {
+                // Skip empty URLs or blob URLs (those should have been uploaded already)
+                if (empty($imageUrl) || strpos($imageUrl, 'blob:') === 0) {
+                    continue;
+                }
+
+                // Check if media already exists for this article and URL
+                $existingMedia = Media::where('file_path', $imageUrl)->first();
+
+                if (!$existingMedia) {
+                    // Create new media record
+                    $media = Media::create([
+                        'title' => $altTexts[$index] ?? "Article Image " . ($index + 1),
+                        'description' => null,
+                        'type' => 'image',
+                        'file_path' => $imageUrl,
+                        'file_name' => basename($imageUrl),
+                        'mime_type' => 'image/jpeg', // Default, could be detected from URL
+                        'file_size' => 0, // Could be fetched from Wasabi
+                        'alt_text' => $altTexts[$index] ?? null,
+                        'caption' => null,
+                        'uploaded_by' => $article->user_id,
+                    ]);
+                    $mediaIds[$index] = $media->id;
+                } else {
+                    $mediaIds[$index] = $existingMedia->id;
+                }
+            }
+
+            // Sync media with article (using attach with sort_order and position)
+            foreach ($mediaIds as $sortOrder => $mediaId) {
+                $article->media()->attach($mediaId, [
+                    'sort_order' => $sortOrder,
+                    'position' => 'content',
+                    'caption' => null,
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error saving article images: ' . $e->getMessage());
+            // Don't throw - allow article save to continue even if image linking fails
         }
     }
 }

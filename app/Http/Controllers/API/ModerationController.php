@@ -138,7 +138,7 @@ class ModerationController extends Controller
     {
         try {
             $article = Article::findOrFail($id);
-            
+
             if ($article->status !== 'approved') {
                 return response()->json(['success' => false, 'message' => 'Article must be approved first'], 400);
             }
@@ -232,7 +232,7 @@ class ModerationController extends Controller
 
             return response()->json(['success' => true, 'message' => 'Article unapproved and sent back to pending', 'article' => $article->fresh(['translations', 'category', 'user'])]);
         } catch (\Exception $e) {
-            \Log::error('Unapprove article error: ' . $e->getMessage());
+            Log::error('Unapprove article error: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to unapprove article'], 500);
         }
     }
