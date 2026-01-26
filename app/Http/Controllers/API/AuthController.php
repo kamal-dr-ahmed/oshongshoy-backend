@@ -7,7 +7,6 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -20,10 +19,13 @@ class AuthController extends Controller
             'password' => 'required|string|min:8|confirmed',
         ]);
 
+        // Hash password using SHA256
+        $hashedPassword = hash('sha256', $request->password);
+
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'password' => Hash::make($request->password),
+            'password' => $hashedPassword,
         ]);
 
         // Assign default 'user' role to all new registrations
@@ -48,17 +50,21 @@ class AuthController extends Controller
             'password' => 'required',
         ]);
 
-        if (!Auth::attempt($request->only('email', 'password'))) {
+        // Hash the provided password using SHA256
+        $hashedPassword = hash('sha256', $request->password);
+        
+        // Find user by email
+        $user = User::where('email', $request->email)->first();
+
+        // Verify password hash
+        if (!$user || $user->password !== $hashedPassword) {
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
             ]);
         }
-
-        $user = Auth::user();
         
         // Check if user is blocked
         if ($user->isBlocked()) {
-            Auth::logout();
             return response()->json([
                 'success' => false,
                 'message' => 'Your account has been blocked. Please contact support.'
